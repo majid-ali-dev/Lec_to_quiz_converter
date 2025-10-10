@@ -1,177 +1,61 @@
-# 🎓 LecToQuiz Converter
+<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
-AI-powered MCQ quiz generator for educational institutions. Generate custom multiple-choice questions instantly using AI, export to PDF, and download answer keys.
+<p align="center">
+<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
+<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+</p>
 
-![Laravel](https://img.shields.io/badge/Laravel-12-red)
-![PHP](https://img.shields.io/badge/PHP-8.2.4-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+## About Laravel
 
-## ✨ Features
+Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
 
-- 🤖 **AI-Powered Generation** - Automatically create MCQs using Groq AI
-- 📄 **PDF Export** - Download quizzes in professional PDF format
-- 🔑 **Answer Keys** - Get separate answer key PDFs
-- ⚡ **Fast & Free** - Generate quizzes in seconds at no cost
-- 🎨 **Professional Design** - Clean, responsive interface
-- 💾 **Database Storage** - Save and retrieve generated quizzes
+- [Simple, fast routing engine](https://laravel.com/docs/routing).
+- [Powerful dependency injection container](https://laravel.com/docs/container).
+- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
+- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
+- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
+- [Robust background job processing](https://laravel.com/docs/queues).
+- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
 
+Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
-## 🛠️ Tech Stack
+## Learning Laravel
 
-- **Backend:** Laravel 12
-- **AI API:** Groq (Free Mixtral-8x7B model)
-- **PDF Generation:** DomPDF
-- **Frontend:** Tailwind CSS
-- **Database:** MySQL
+Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
 
-## 📋 Prerequisites
+You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
 
-- PHP >= 8.2.4
-- Composer
-- MySQL
-- Node.js & NPM (optional)
+If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
 
-## ⚙️ Installation
+## Laravel Sponsors
 
-1. **Clone the repository**
-```bash
-git clone https://github.com/yourusername/lectoquiz-converter.git
-cd lectoquiz-converter
-```
+We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
 
-2. **Install dependencies**
-```bash
-composer install
-```
+### Premium Partners
 
-3. **Setup environment**
-```bash
-cp .env.example .env
-php artisan key:generate
-```
+- **[Vehikl](https://vehikl.com)**
+- **[Tighten Co.](https://tighten.co)**
+- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
+- **[64 Robots](https://64robots.com)**
+- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
+- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
+- **[Redberry](https://redberry.international/laravel-development)**
+- **[Active Logic](https://activelogic.com)**
 
-4. **Configure database in `.env`**
-```env
-DB_DATABASE=lectoquiz
-DB_USERNAME=root
-DB_PASSWORD=
-```
+## Contributing
 
-5. **Get Groq API Key**
-- Visit https://console.groq.com/
-- Sign up and create API key
-- Add to `.env`:
-```env
-GROQ_API_KEY=your_api_key_here
-GROQ_MODEL=mixtral-8x7b-32768
-```
+Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
 
-6. **Run migrations**
-```bash
-php artisan migrate
-```
+## Code of Conduct
 
-7. **Start the server**
-```bash
-php artisan serve
-```
+In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
 
-Visit: `http://localhost:8000`
+## Security Vulnerabilities
 
-## 📖 Usage
+If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
 
-1. **Enter Details:**
-   - University name
-   - Topic/Subject
-   - Number of questions (5-30)
+## License
 
-2. **Generate Quiz:**
-   - Click "Generate Quiz" button
-   - Wait for AI to create questions (2-5 seconds)
-
-3. **Download:**
-   - Download quiz as PDF
-   - Download answer key separately
-
-## 🎯 Example Topics
-
-- Computer Science (Loops, Data Structures, Algorithms)
-- Database Management Systems
-- Computer Networks
-- Operating Systems
-- Physics, Chemistry, Biology
-- Mathematics
-- Any educational topic!
-
-## 📁 Project Structure
-
-```
-lectoquiz-converter/
-├── app/
-│   ├── Http/Controllers/
-│   │   └── QuizController.php
-│   └── Models/
-│       └── Quiz.php
-├── resources/
-│   └── views/
-│       ├── layouts/
-│       └── quiz/
-│           ├── index.blade.php
-│           ├── result.blade.php
-│           ├── pdf.blade.php
-│           └── answer-key.blade.php
-├── routes/
-│   └── web.php
-└── database/
-    └── migrations/
-```
-
-## 🔧 Configuration
-
-### Change AI Model
-Edit `.env`:
-```env
-GROQ_MODEL=llama3-70b-8192  # Or any Groq model
-```
-
-### Customize PDF Design
-Edit `resources/views/quiz/pdf.blade.php`
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the project
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 👨‍💻 Author
-
-**Your Name**
-- GitHub: [@majid-ali-dev](https://[github.com/yourusername](https://github.com/majid-ali-dev))
-- Email: majidalishar2@gmail.com
-
-## 🙏 Acknowledgments
-
-- [Laravel](https://laravel.com/) - PHP Framework
-- [Groq](https://groq.com/) - Fast AI Inference
-- [DomPDF](https://github.com/barryvdh/laravel-dompdf) - PDF Generation
-- [Tailwind CSS](https://tailwindcss.com/) - UI Styling
-
-## 📞 Support
-
-If you have any questions or issues, please open an issue on GitHub.
-
-## 🌟 Show Your Support
-
-Give a ⭐️ if this project helped you!
-
----
-
-**Made with ❤️ for Education**
+The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
