@@ -15,20 +15,10 @@ AI-powered MCQ quiz generator for educational institutions. Generate custom mult
 - 🎨 **Professional Design** - Clean, responsive interface
 - 💾 **Database Storage** - Save and retrieve generated quizzes
 
-## 🚀 Demo
-
-### Input Form
-![Form Screenshot](screenshots/form.png)
-
-### Generated Quiz
-![Quiz Screenshot](screenshots/quiz.png)
-
-### PDF Output
-![PDF Screenshot](screenshots/pdf.png)
 
 ## 🛠️ Tech Stack
 
-- **Backend:** Laravel 10
+- **Backend:** Laravel 12
 - **AI API:** Groq (Free Mixtral-8x7B model)
 - **PDF Generation:** DomPDF
 - **Frontend:** Tailwind CSS
@@ -36,7 +26,7 @@ AI-powered MCQ quiz generator for educational institutions. Generate custom mult
 
 ## 📋 Prerequisites
 
-- PHP >= 8.1
+- PHP >= 8.2.4
 - Composer
 - MySQL
 - Node.js & NPM (optional)
@@ -164,8 +154,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👨‍💻 Author
 
 **Your Name**
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Email: your.email@example.com
+- GitHub: [@majid-ali-dev](https://[github.com/yourusername](https://github.com/majid-ali-dev))
+- Email: majidalishar2@gmail.com
 
 ## 🙏 Acknowledgments
 
