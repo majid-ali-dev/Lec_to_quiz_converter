@@ -2,8 +2,8 @@
 
 AI-powered MCQ quiz generator for educational institutions. Generate custom multiple-choice questions instantly using AI, export to PDF, and download answer keys.
 
-![Laravel](https://img.shields.io/badge/Laravel-10-red)
-![PHP](https://img.shields.io/badge/PHP-8.1+-blue)
+![Laravel](https://img.shields.io/badge/Laravel-12-red)
+![PHP](https://img.shields.io/badge/PHP-8.2.4-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## ✨ Features
