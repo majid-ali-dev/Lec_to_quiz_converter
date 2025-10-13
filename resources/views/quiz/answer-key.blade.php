@@ -109,7 +109,7 @@
             font-size: 16px;
         }
 
-       
+
         .footer {
             margin-top: 40px;
             padding-top: 15px;
