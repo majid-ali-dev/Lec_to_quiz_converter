@@ -192,10 +192,10 @@
                 @endforeach
             </div>
             
-            <!-- Answer Space -->
+            {{-- <!-- Answer Space -->
             <div class="answer-space">
                 <strong>Your Answer:</strong> __________
-            </div>
+            </div> --}}
         </div>
         
         <!-- Page break after every 4 questions -->

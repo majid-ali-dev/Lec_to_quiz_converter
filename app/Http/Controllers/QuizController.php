@@ -7,11 +7,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\Log;
+use PhpOffice\PhpWord\PhpWord;
+use PhpOffice\PhpWord\IOFactory;
 
 class QuizController extends Controller
 {
     /**
-     * Home page dikhata hai (form page)
+     * Display the home page (form page)
      */
     public function index()
     {
@@ -19,11 +21,11 @@ class QuizController extends Controller
     }
 
     /**
-     * Quiz generate karta hai AI se
+     * Generate quiz using AI
      */
     public function generateQuiz(Request $request)
     {
-        // Form data validate karte hain
+        // Validate form data
         $request->validate([
             'university_name' => 'required|string|max:255',
             'topic_name' => 'required|string|max:255',
@@ -31,13 +33,13 @@ class QuizController extends Controller
         ]);
 
         try {
-            // AI se MCQs generate karte hain with fallback
+            // Generate MCQs using AI with fallback
             $questions = $this->generateQuestionsWithFallback(
                 $request->topic_name,
                 $request->num_questions
             );
 
-            // Database mein save karte hain
+            // Save to database
             $quiz = Quiz::create([
                 'university_name' => $request->university_name,
                 'topic_name' => $request->topic_name,
@@ -45,20 +47,19 @@ class QuizController extends Controller
                 'questions' => $questions
             ]);
 
-            // Result page pe redirect karte hain
+            // Redirect to result page
             return redirect()->route('quiz.result', $quiz->id);
-
         } catch (\Exception $e) {
-            // Error log karte hain
+            // Log error details
             Log::error('Quiz Generation Error: ' . $e->getMessage());
             Log::error('Stack Trace: ' . $e->getTraceAsString());
-            
-            return back()->with('error', 'Quiz generate karne mein error aaya. Please check your API key and try again.');
+
+            return back()->with('error', 'Error generating quiz. Please check your API key and try again.');
         }
     }
 
     /**
-     * Generated quiz dikhata hai
+     * Display generated quiz
      */
     public function showResult($id)
     {
@@ -67,62 +68,131 @@ class QuizController extends Controller
     }
 
     /**
-     * PDF download karta hai
+     * Download quiz as PDF
      */
     public function downloadPDF($id)
     {
         $quiz = Quiz::findOrFail($id);
-        
-        // PDF generate karte hain
+
+        // Generate PDF
         $pdf = Pdf::loadView('quiz.pdf', compact('quiz'));
-        
-        // PDF download karte hain
+
+        // Download PDF
         return $pdf->download('quiz_' . str_replace(' ', '_', $quiz->topic_name) . '.pdf');
     }
 
     /**
-     * Answer key download karta hai
+     * Download quiz as DOCX
      */
-    public function downloadAnswerKey($id)
+    public function downloadDOCX($id)
     {
         $quiz = Quiz::findOrFail($id);
-        
-        // Answer key PDF generate karte hain
+
+        $phpWord = new PhpWord();
+        $section = $phpWord->addSection();
+
+        $titleStyle = ['bold' => true, 'size' => 16];
+        $headingStyle = ['bold' => true, 'size' => 12];
+
+        $section->addText($quiz->university_name . ' - Question Paper', $titleStyle);
+        $section->addText('Topic: ' . $quiz->topic_name);
+        $section->addTextBreak(1);
+
+        foreach ($quiz->questions as $index => $q) {
+            $number = $index + 1;
+            $section->addText($number . '. ' . ($q['question'] ?? ''), $headingStyle);
+            if (isset($q['options']) && is_array($q['options'])) {
+                foreach (['a', 'b', 'c', 'd'] as $letter) {
+                    if (isset($q['options'][$letter])) {
+                        $section->addText("  {$letter}) " . $q['options'][$letter]);
+                    }
+                }
+            }
+            $section->addTextBreak(1);
+        }
+
+        $fileName = 'quiz_' . str_replace(' ', '_', $quiz->topic_name) . '.docx';
+        $tempFile = tempnam(sys_get_temp_dir(), 'docx_');
+        $writer = IOFactory::createWriter($phpWord, 'Word2007');
+        $writer->save($tempFile);
+
+        return response()->download($tempFile, $fileName)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Download answer key as PDF
+     */
+    public function downloadAnswerKeyPDF($id)
+    {
+        $quiz = Quiz::findOrFail($id);
+
+        // Generate answer key PDF
         $pdf = Pdf::loadView('quiz.answer-key', compact('quiz'));
-        
-        // PDF download karte hain
+
+        // Download PDF
         return $pdf->download('answer_key_' . str_replace(' ', '_', $quiz->topic_name) . '.pdf');
     }
 
     /**
-     * Questions generate karta hai with automatic fallback
+     * Download answer key as DOCX
+     */
+    public function downloadAnswerKeyDOCX($id)
+    {
+        $quiz = Quiz::findOrFail($id);
+
+        $phpWord = new PhpWord();
+        $section = $phpWord->addSection();
+
+        $titleStyle = ['bold' => true, 'size' => 16];
+        $section->addText('CONFIDENTIAL - Answer Key', $titleStyle);
+        $section->addText('Topic: ' . $quiz->topic_name);
+        $section->addTextBreak(1);
+
+        foreach ($quiz->questions as $index => $q) {
+            $number = $index + 1;
+            $answer = isset($q['correct_answer']) ? strtoupper($q['correct_answer']) : '-';
+            $section->addText("Q{$number}: {$answer}");
+        }
+
+        $fileName = 'answer_key_' . str_replace(' ', '_', $quiz->topic_name) . '.docx';
+        $tempFile = tempnam(sys_get_temp_dir(), 'docx_');
+        $writer = IOFactory::createWriter($phpWord, 'Word2007');
+        $writer->save($tempFile);
+
+        return response()->download($tempFile, $fileName)->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Generate questions with automatic fallback
      */
     private function generateQuestionsWithFallback($topic, $numQuestions)
     {
         $apiKey = env('GROQ_API_KEY');
-        
-        // Agar API key nahi hai to directly smart questions generate karo
+
+        // If no API key, use smart question generator
         if (!$apiKey) {
             Log::warning('GROQ_API_KEY not found, using smart question generator');
             return $this->generateSmartQuestions($topic, $numQuestions);
         }
 
         try {
-            // First try: Groq API
+            // Try Groq API first
             $questions = $this->callGroqAPI($topic, $numQuestions);
-            
-            // Check if questions are valid
+
+            // Validate and deduplicate questions
+            $questions = $this->deduplicateQuestions($questions);
+
+            // Check if we have enough valid questions
             if (count($questions) >= $numQuestions && $this->validateQuestions($questions)) {
                 Log::info('Successfully generated questions via Groq API');
-                return $questions;
+                return array_slice($questions, 0, $numQuestions);
             }
-            
-            // If not enough valid questions, use smart generator
+
+            // If not enough questions, use smart generator
             Log::warning('Groq API returned insufficient questions, using smart generator');
             return $this->generateSmartQuestions($topic, $numQuestions);
-            
         } catch (\Exception $e) {
-            // Agar API fail ho to smart questions use karo
+            // On API failure, use smart questions
             Log::error('Groq API failed: ' . $e->getMessage());
             Log::info('Falling back to smart question generator');
             return $this->generateSmartQuestions($topic, $numQuestions);
@@ -130,31 +200,34 @@ class QuizController extends Controller
     }
 
     /**
-     * Groq API ko call karta hai
+     * Call Groq API for question generation
      */
     private function callGroqAPI($topic, $numQuestions)
     {
         $apiKey = env('GROQ_API_KEY');
-        
-        $prompt = "Generate exactly {$numQuestions} multiple choice questions about '{$topic}' for university students.
 
-Use this EXACT format:
+        $prompt = "You are an expert university educator. Create exactly {$numQuestions} UNIQUE high-quality MCQs specifically about '{$topic}'.
 
-1. [Clear question about {$topic}]
-a) [First option]
-b) [Second option]
-c) [Third option]
-d) [Fourth option]
-Answer: a
+CRITICAL RULES:
+1. Each question MUST be directly related to {$topic} - no generic questions
+2. All questions MUST be completely unique - no duplicates or similar variations
+3. Each question must have exactly 4 options labeled a), b), c), d)
+4. Exactly ONE correct answer per question
+5. Options must be plausible and test real knowledge
+6. Use professional academic language
+7. Questions should test understanding, not memorization
+8. NO questions like 'What is {$topic}?' or 'Define {$topic}'
+9. Make questions specific with real examples from {$topic} domain
 
-2. [Another question]
-a) [First option]
-b) [Second option]
-c) [Third option]
-d) [Fourth option]
-Answer: b
+OUTPUT FORMAT (exactly like this for each question):
+1. [Specific question about {$topic}]
+a) [Option A]
+b) [Option B]
+c) [Option C]
+d) [Option D]
+Answer: [correct letter]
 
-Make questions educational, specific, and relevant to {$topic}. Generate all {$numQuestions} questions now:";
+Create diverse questions covering different aspects of {$topic}. Each question must be substantially different from others.";
 
         $response = Http::withHeaders([
             'Authorization' => 'Bearer ' . $apiKey,
@@ -164,15 +237,18 @@ Make questions educational, specific, and relevant to {$topic}. Generate all {$n
             'messages' => [
                 [
                     'role' => 'system',
-                    'content' => 'You are an expert educator creating clear multiple choice questions.'
+                    'content' => 'You are an expert educator. Create unique, topic-specific multiple choice questions. Never repeat questions.'
                 ],
                 [
                     'role' => 'user',
                     'content' => $prompt
                 ]
             ],
-            'temperature' => 0.7,
-            'max_tokens' => 3000,
+            'temperature' => 0.8, // Increased for more variety
+            'max_tokens' => 4000,
+            'top_p' => 0.95,
+            'frequency_penalty' => 1.0, // Penalize repetition
+            'presence_penalty' => 0.6
         ]);
 
         if ($response->failed()) {
@@ -181,7 +257,7 @@ Make questions educational, specific, and relevant to {$topic}. Generate all {$n
         }
 
         $result = $response->json();
-        
+
         if (!isset($result['choices'][0]['message']['content'])) {
             Log::error('Invalid API response structure: ' . json_encode($result));
             throw new \Exception('Invalid API response');
@@ -189,18 +265,18 @@ Make questions educational, specific, and relevant to {$topic}. Generate all {$n
 
         $generatedText = $result['choices'][0]['message']['content'];
         Log::info('AI Response length: ' . strlen($generatedText));
-        
+
         return $this->parseQuestions($generatedText, $numQuestions);
     }
 
     /**
-     * Parse questions from AI response
+     * Parse questions from AI response with improved deduplication
      */
     private function parseQuestions($text, $numQuestions)
     {
         $questions = [];
         $lines = explode("\n", $text);
-        
+
         $currentQuestion = null;
         $currentOptions = [];
         $correctAnswer = 'a';
@@ -209,36 +285,47 @@ Make questions educational, specific, and relevant to {$topic}. Generate all {$n
             $line = trim($line);
             if (empty($line)) continue;
 
-            // Question: "1." or "1)"
-            if (preg_match('/^(\d+)[\.\)]\s*(.+)$/', $line, $matches) && strlen($matches[2]) > 10) {
-                if ($currentQuestion && count($currentOptions) == 4) {
-                    $questions[] = [
-                        'question' => $currentQuestion,
-                        'options' => $currentOptions,
-                        'correct_answer' => strtolower($correctAnswer)
-                    ];
+            // Match question pattern: "1." or "1)" or "Q1:"
+            if (preg_match('/^(?:Q?\d+[\.KATEX_INLINE_CLOSE:]?\s*)?(.+)$/i', $line, $matches)) {
+                $potentialQuestion = trim($matches[1]);
+
+                // Check if this is actually a question (contains ? or is long enough)
+                if ((strpos($potentialQuestion, '?') !== false || strlen($potentialQuestion) > 30)
+                    && !preg_match('/^[a-d][\.KATEX_INLINE_CLOSE]/i', $potentialQuestion)
+                ) {
+
+                    // Save previous question if complete
+                    if ($currentQuestion && count($currentOptions) == 4) {
+                        $questions[] = [
+                            'question' => $currentQuestion,
+                            'options' => $currentOptions,
+                            'correct_answer' => strtolower($correctAnswer)
+                        ];
+                    }
+
+                    $currentQuestion = $potentialQuestion;
+                    $currentOptions = [];
+                    $correctAnswer = 'a';
                 }
-                
-                $currentQuestion = trim($matches[2]);
-                $currentOptions = [];
-                $correctAnswer = 'a';
             }
-            // Options: "a)" or "a."
-            elseif (preg_match('/^([a-d])[\.\)]\s*(.+)$/i', $line, $matches)) {
+
+            // Match options: "a)" or "a."
+            if (preg_match('/^([a-d])[\.KATEX_INLINE_CLOSE]\s*(.+)$/i', $line, $matches)) {
                 $optionLetter = strtolower($matches[1]);
                 $optionText = trim($matches[2]);
-                
-                if (strlen($optionText) > 2) {
+
+                if (strlen($optionText) > 1) {
                     $currentOptions[$optionLetter] = $optionText;
                 }
             }
-            // Answer: "Answer: a"
-            elseif (preg_match('/^(?:Answer|Correct):\s*([a-d])/i', $line, $matches)) {
+
+            // Match answer: "Answer: a" or "Correct: a"
+            if (preg_match('/^(?:Answer|Correct|Ans)[\s:]+([a-d])/i', $line, $matches)) {
                 $correctAnswer = strtolower($matches[1]);
             }
         }
 
-        // Save last question
+        // Save last question if complete
         if ($currentQuestion && count($currentOptions) == 4) {
             $questions[] = [
                 'question' => $currentQuestion,
@@ -247,97 +334,264 @@ Make questions educational, specific, and relevant to {$topic}. Generate all {$n
             ];
         }
 
-        return $questions;
+        // Strict deduplication
+        return $this->deduplicateQuestions($questions);
     }
 
     /**
-     * Validate if questions are properly formatted
+     * Remove duplicate questions with improved logic
+     */
+    private function deduplicateQuestions($questions)
+    {
+        $uniqueQuestions = [];
+        $seenQuestions = [];
+        $seenPatterns = [];
+
+        foreach ($questions as $q) {
+            // Normalize question for comparison
+            $normalizedQ = strtolower(preg_replace('/[^a-z0-9]+/', '', $q['question']));
+
+            // Extract key words for pattern matching
+            $words = str_word_count(strtolower($q['question']), 1);
+            $keyWords = array_slice($words, 0, 5); // First 5 words
+            $pattern = implode('', $keyWords);
+
+            // Check for exact duplicates and similar patterns
+            if (!isset($seenQuestions[$normalizedQ]) && !isset($seenPatterns[$pattern])) {
+                $seenQuestions[$normalizedQ] = true;
+                $seenPatterns[$pattern] = true;
+                $uniqueQuestions[] = $q;
+            }
+        }
+
+        return $uniqueQuestions;
+    }
+
+    /**
+     * Validate if questions are properly formatted and topic-relevant
      */
     private function validateQuestions($questions)
     {
+        if (!is_array($questions) || empty($questions)) {
+            return false;
+        }
+
         foreach ($questions as $q) {
-            // Check question exists
+            // Check question exists and is substantial
             if (empty($q['question']) || strlen($q['question']) < 10) {
                 return false;
             }
-            
+
             // Check all 4 options exist
-            if (!isset($q['options']['a']) || !isset($q['options']['b']) || 
-                !isset($q['options']['c']) || !isset($q['options']['d'])) {
+            if (
+                !isset($q['options']['a']) || !isset($q['options']['b']) ||
+                !isset($q['options']['c']) || !isset($q['options']['d'])
+            ) {
                 return false;
             }
-            
-            // Check options are not generic
-            if (strpos($q['options']['a'], 'First possible answer') !== false) {
+
+            // Check options are not generic or placeholder text
+            foreach (['a', 'b', 'c', 'd'] as $letter) {
+                $option = strtolower($q['options'][$letter]);
+                if (
+                    strlen(trim($q['options'][$letter])) < 2 ||
+                    strpos($option, 'option') !== false ||
+                    strpos($option, 'answer') !== false ||
+                    strpos($option, 'first') !== false ||
+                    strpos($option, 'second') !== false
+                ) {
+                    return false;
+                }
+            }
+
+            // Correct answer must be a-d
+            if (!isset($q['correct_answer']) || !in_array(strtolower($q['correct_answer']), ['a', 'b', 'c', 'd'])) {
                 return false;
             }
         }
-        
+
         return true;
     }
 
     /**
-     * SMART Question Generator - Topic-specific questions
-     * Ye function actually topic ke base pe intelligent questions banata hai
+     * Generate smart topic-specific questions with better variety
      */
     private function generateSmartQuestions($topic, $numQuestions)
     {
         Log::info("Generating smart questions for topic: {$topic}");
-        
-        // Common question templates with actual content
+
+        // Get all possible templates for the topic
         $templates = $this->getTopicSpecificTemplates($topic);
-        
-        $questions = [];
-        $templateCount = count($templates);
-        
-        for ($i = 0; $i < $numQuestions; $i++) {
-            $template = $templates[$i % $templateCount];
-            
-            // Replace {topic} with actual topic
-            $question = str_replace('{topic}', $topic, $template['question']);
-            
-            $options = [];
-            foreach ($template['options'] as $key => $opt) {
-                $options[$key] = str_replace('{topic}', $topic, $opt);
-            }
-            
-            $questions[] = [
-                'question' => $question,
-                'options' => $options,
-                'correct_answer' => $template['correct']
-            ];
+
+        // Shuffle templates for variety
+        shuffle($templates);
+
+        // If we need more questions than templates, generate variations
+        if ($numQuestions > count($templates)) {
+            $templates = $this->expandTemplates($templates, $topic, $numQuestions);
         }
-        
+
+        $questions = [];
+        $usedQuestions = [];
+
+        for ($i = 0; $i < $numQuestions; $i++) {
+            if (isset($templates[$i])) {
+                $template = $templates[$i];
+
+                // Replace {topic} placeholder
+                $question = str_replace('{topic}', $topic, $template['question']);
+
+                // Skip if this exact question was already used
+                $questionKey = strtolower(preg_replace('/[^a-z0-9]+/', '', $question));
+                if (isset($usedQuestions[$questionKey])) {
+                    continue;
+                }
+                $usedQuestions[$questionKey] = true;
+
+                $options = [];
+                foreach ($template['options'] as $key => $opt) {
+                    $options[$key] = str_replace('{topic}', $topic, $opt);
+                }
+
+                // Randomize correct answer position occasionally
+                if (rand(0, 100) > 70) {
+                    $options = $this->shuffleOptions($options, $template['correct']);
+                    $template['correct'] = array_search($options[$template['correct']], $options);
+                }
+
+                $questions[] = [
+                    'question' => $question,
+                    'options' => $options,
+                    'correct_answer' => $template['correct']
+                ];
+            }
+        }
+
         return $questions;
     }
 
     /**
-     * Topic-specific question templates
+     * Shuffle options while maintaining correct answer tracking
+     */
+    private function shuffleOptions($options, &$correctAnswer)
+    {
+        $correctText = $options[$correctAnswer];
+        $optionValues = array_values($options);
+        shuffle($optionValues);
+
+        $newOptions = [];
+        $letters = ['a', 'b', 'c', 'd'];
+
+        foreach ($letters as $index => $letter) {
+            $newOptions[$letter] = $optionValues[$index];
+            if ($optionValues[$index] === $correctText) {
+                $correctAnswer = $letter;
+            }
+        }
+
+        return $newOptions;
+    }
+
+    /**
+     * Expand templates with variations
+     */
+    private function expandTemplates($templates, $topic, $needed)
+    {
+        $expanded = $templates;
+        $variations = [
+            'Which of the following best describes',
+            'What is the primary characteristic of',
+            'In the context of {topic}, what is',
+            'Which statement about {topic} is correct',
+            'What distinguishes {topic} from other approaches',
+            'The main advantage of {topic} is',
+            'When working with {topic}, which is true',
+            'A key feature of {topic} includes',
+            'In {topic}, the most important aspect is',
+            'Which principle applies to {topic}'
+        ];
+
+        while (count($expanded) < $needed) {
+            foreach ($templates as $template) {
+                if (count($expanded) >= $needed) break;
+
+                $variation = $variations[array_rand($variations)];
+                $newQuestion = $variation . ' ' . str_replace(['What is', 'Which'], '', $template['question']);
+
+                $expanded[] = [
+                    'question' => $newQuestion,
+                    'options' => $template['options'],
+                    'correct' => $template['correct']
+                ];
+            }
+        }
+
+        return $expanded;
+    }
+
+    /**
+     * Get topic-specific question templates
      */
     private function getTopicSpecificTemplates($topic)
     {
-        // Convert topic to lowercase for comparison
         $topicLower = strtolower($topic);
-        
-        // Check if it's a programming/CS topic
-        if (strpos($topicLower, 'loop') !== false || strpos($topicLower, 'programming') !== false) {
+
+        // Programming topics
+        if (
+            strpos($topicLower, 'loop') !== false ||
+            strpos($topicLower, 'programming') !== false ||
+            strpos($topicLower, 'code') !== false ||
+            strpos($topicLower, 'algorithm') !== false
+        ) {
             return $this->getProgrammingTemplates();
         }
-        
-        if (strpos($topicLower, 'database') !== false || strpos($topicLower, 'dbms') !== false) {
+
+        // Database topics
+        if (
+            strpos($topicLower, 'database') !== false ||
+            strpos($topicLower, 'dbms') !== false ||
+            strpos($topicLower, 'sql') !== false ||
+            strpos($topicLower, 'mysql') !== false
+        ) {
             return $this->getDatabaseTemplates();
         }
-        
-        if (strpos($topicLower, 'network') !== false) {
+
+        // Network topics
+        if (
+            strpos($topicLower, 'network') !== false ||
+            strpos($topicLower, 'tcp') !== false ||
+            strpos($topicLower, 'ip') !== false ||
+            strpos($topicLower, 'protocol') !== false
+        ) {
             return $this->getNetworkTemplates();
         }
-        
-        // Default: Generic but intelligent templates
+
+        // Web development topics
+        if (
+            strpos($topicLower, 'web') !== false ||
+            strpos($topicLower, 'html') !== false ||
+            strpos($topicLower, 'css') !== false ||
+            strpos($topicLower, 'javascript') !== false
+        ) {
+            return $this->getWebTemplates();
+        }
+
+        // Data structure topics
+        if (
+            strpos($topicLower, 'data structure') !== false ||
+            strpos($topicLower, 'array') !== false ||
+            strpos($topicLower, 'stack') !== false ||
+            strpos($topicLower, 'queue') !== false
+        ) {
+            return $this->getDataStructureTemplates();
+        }
+
+        // Default: Generate intelligent generic templates
         return $this->getGenericTemplates($topic);
     }
 
     /**
-     * Programming/Loop specific questions
+     * Programming specific question templates
      */
     private function getProgrammingTemplates()
     {
@@ -345,10 +599,10 @@ Make questions educational, specific, and relevant to {$topic}. Generate all {$n
             [
                 'question' => 'What is the primary purpose of a loop in programming?',
                 'options' => [
-                    'a' => 'To execute a block of code repeatedly',
-                    'b' => 'To declare variables',
-                    'c' => 'To define functions',
-                    'd' => 'To handle errors'
+                    'a' => 'To execute a block of code repeatedly based on a condition',
+                    'b' => 'To declare variables in the program',
+                    'c' => 'To define functions and methods',
+                    'd' => 'To handle errors and exceptions'
                 ],
                 'correct' => 'a'
             ],
@@ -363,56 +617,86 @@ Make questions educational, specific, and relevant to {$topic}. Generate all {$n
                 'correct' => 'c'
             ],
             [
-                'question' => 'What happens when a break statement is encountered in a loop?',
+                'question' => 'What happens when a break statement is encountered inside a loop?',
                 'options' => [
-                    'a' => 'Loop continues to next iteration',
+                    'a' => 'Loop continues to the next iteration',
                     'b' => 'Loop terminates immediately',
-                    'c' => 'Loop restarts from beginning',
-                    'd' => 'Nothing happens'
+                    'c' => 'Loop restarts from the beginning',
+                    'd' => 'Nothing happens to the loop'
                 ],
                 'correct' => 'b'
             ],
             [
-                'question' => 'In a for loop, which part is executed first?',
+                'question' => 'In a for loop, which component is executed first?',
                 'options' => [
-                    'a' => 'Initialization',
-                    'b' => 'Condition',
-                    'c' => 'Increment/Decrement',
-                    'd' => 'Loop body'
+                    'a' => 'Initialization statement',
+                    'b' => 'Condition check',
+                    'c' => 'Increment/Decrement operation',
+                    'd' => 'Loop body statements'
                 ],
                 'correct' => 'a'
             ],
             [
                 'question' => 'What is an infinite loop?',
                 'options' => [
-                    'a' => 'A loop that never starts',
+                    'a' => 'A loop that never starts execution',
                     'b' => 'A loop that executes exactly once',
-                    'c' => 'A loop that never terminates',
-                    'd' => 'A loop with no body'
+                    'c' => 'A loop that never terminates naturally',
+                    'd' => 'A loop with no body statements'
                 ],
                 'correct' => 'c'
             ],
+            [
+                'question' => 'Which keyword is used to skip the current iteration in a loop?',
+                'options' => [
+                    'a' => 'break',
+                    'b' => 'continue',
+                    'c' => 'return',
+                    'd' => 'exit'
+                ],
+                'correct' => 'b'
+            ],
+            [
+                'question' => 'What is the time complexity of a single for loop iterating n times?',
+                'options' => [
+                    'a' => 'O(1)',
+                    'b' => 'O(n)',
+                    'c' => 'O(n²)',
+                    'd' => 'O(log n)'
+                ],
+                'correct' => 'b'
+            ],
+            [
+                'question' => 'Nested loops with n iterations each have what time complexity?',
+                'options' => [
+                    'a' => 'O(n)',
+                    'b' => 'O(2n)',
+                    'c' => 'O(n²)',
+                    'd' => 'O(n log n)'
+                ],
+                'correct' => 'c'
+            ]
         ];
     }
 
     /**
-     * Database specific questions
+     * Database specific question templates
      */
     private function getDatabaseTemplates()
     {
         return [
             [
-                'question' => 'In which of the following formats data is stored in the database management system?',
+                'question' => 'In which format is data primarily stored in a relational database?',
                 'options' => [
-                    'a' => 'Image',
-                    'b' => 'Text',
-                    'c' => 'Table',
-                    'd' => 'Graph'
+                    'a' => 'Image files',
+                    'b' => 'Text documents',
+                    'c' => 'Tables with rows and columns',
+                    'd' => 'Graph structures'
                 ],
                 'correct' => 'c'
             ],
             [
-                'question' => 'What is a primary key in a database?',
+                'question' => 'What is a primary key in a database table?',
                 'options' => [
                     'a' => 'A key used for encryption',
                     'b' => 'A unique identifier for each record',
@@ -422,7 +706,7 @@ Make questions educational, specific, and relevant to {$topic}. Generate all {$n
                 'correct' => 'b'
             ],
             [
-                'question' => 'Which SQL command is used to retrieve data from a database?',
+                'question' => 'Which SQL command retrieves data from a database?',
                 'options' => [
                     'a' => 'GET',
                     'b' => 'FETCH',
@@ -432,103 +716,351 @@ Make questions educational, specific, and relevant to {$topic}. Generate all {$n
                 'correct' => 'c'
             ],
             [
-                'question' => 'What does DBMS stand for?',
+                'question' => 'What does ACID stand for in database transactions?',
                 'options' => [
-                    'a' => 'Data Base Management System',
-                    'b' => 'Digital Base Management Software',
-                    'c' => 'Data Binary Management System',
-                    'd' => 'Database Monitoring Service'
+                    'a' => 'Atomicity, Consistency, Isolation, Durability',
+                    'b' => 'Addition, Creation, Insertion, Deletion',
+                    'c' => 'Access, Control, Index, Data',
+                    'd' => 'Automatic, Concurrent, Independent, Direct'
                 ],
                 'correct' => 'a'
             ],
             [
-                'question' => 'Which of the following is NOT a type of database relationship?',
+                'question' => 'Which SQL command is used to modify existing data?',
                 'options' => [
-                    'a' => 'One-to-One',
-                    'b' => 'One-to-Many',
-                    'c' => 'Many-to-Many',
-                    'd' => 'All-to-All'
+                    'a' => 'MODIFY',
+                    'b' => 'UPDATE',
+                    'c' => 'CHANGE',
+                    'd' => 'ALTER'
+                ],
+                'correct' => 'b'
+            ],
+            [
+                'question' => 'What is normalization in database design?',
+                'options' => [
+                    'a' => 'Making all data uppercase',
+                    'b' => 'Organizing data to reduce redundancy',
+                    'c' => 'Compressing database files',
+                    'd' => 'Converting to a standard format'
+                ],
+                'correct' => 'b'
+            ],
+            [
+                'question' => 'Which JOIN returns all records when there is a match in either table?',
+                'options' => [
+                    'a' => 'INNER JOIN',
+                    'b' => 'LEFT JOIN',
+                    'c' => 'RIGHT JOIN',
+                    'd' => 'FULL OUTER JOIN'
                 ],
                 'correct' => 'd'
             ],
+            [
+                'question' => 'What is a foreign key in a database?',
+                'options' => [
+                    'a' => 'A key from another country',
+                    'b' => 'A field that links to the primary key of another table',
+                    'c' => 'An encrypted key',
+                    'd' => 'A backup key'
+                ],
+                'correct' => 'b'
+            ]
         ];
     }
 
     /**
-     * Network specific questions
+     * Network specific question templates
      */
     private function getNetworkTemplates()
     {
         return [
             [
-                'question' => 'What does IP stand for in networking?',
+                'question' => 'What does TCP stand for in networking?',
                 'options' => [
-                    'a' => 'Internet Provider',
-                    'b' => 'Internet Protocol',
-                    'c' => 'Internal Process',
-                    'd' => 'Interconnected Port'
+                    'a' => 'Transfer Control Protocol',
+                    'b' => 'Transmission Control Protocol',
+                    'c' => 'Technical Communication Protocol',
+                    'd' => 'Transport Communication Process'
                 ],
                 'correct' => 'b'
             ],
             [
-                'question' => 'Which layer of the OSI model handles data transmission?',
+                'question' => 'Which layer of the OSI model handles routing?',
                 'options' => [
-                    'a' => 'Application Layer',
-                    'b' => 'Transport Layer',
-                    'c' => 'Physical Layer',
-                    'd' => 'Session Layer'
+                    'a' => 'Physical Layer',
+                    'b' => 'Data Link Layer',
+                    'c' => 'Network Layer',
+                    'd' => 'Transport Layer'
                 ],
                 'correct' => 'c'
             ],
             [
-                'question' => 'What is the purpose of a router?',
+                'question' => 'What is the purpose of a subnet mask?',
                 'options' => [
-                    'a' => 'To connect devices within a network',
-                    'b' => 'To forward data between different networks',
-                    'c' => 'To provide power to devices',
-                    'd' => 'To store network data'
+                    'a' => 'To hide IP addresses',
+                    'b' => 'To determine network and host portions of an IP',
+                    'c' => 'To encrypt network traffic',
+                    'd' => 'To compress data packets'
                 ],
                 'correct' => 'b'
             ],
+            [
+                'question' => 'Which protocol is connectionless?',
+                'options' => [
+                    'a' => 'TCP',
+                    'b' => 'FTP',
+                    'c' => 'UDP',
+                    'd' => 'SSH'
+                ],
+                'correct' => 'c'
+            ],
+            [
+                'question' => 'What is the default port for HTTP?',
+                'options' => [
+                    'a' => '21',
+                    'b' => '80',
+                    'c' => '443',
+                    'd' => '8080'
+                ],
+                'correct' => 'b'
+            ],
+            [
+                'question' => 'Which device operates at Layer 2 of the OSI model?',
+                'options' => [
+                    'a' => 'Router',
+                    'b' => 'Switch',
+                    'c' => 'Hub',
+                    'd' => 'Gateway'
+                ],
+                'correct' => 'b'
+            ]
         ];
     }
 
     /**
-     * Generic intelligent templates
+     * Web development specific templates
+     */
+    private function getWebTemplates()
+    {
+        return [
+            [
+                'question' => 'What does HTML stand for?',
+                'options' => [
+                    'a' => 'Hyper Text Markup Language',
+                    'b' => 'High Tech Modern Language',
+                    'c' => 'Hyper Transfer Markup Language',
+                    'd' => 'Home Tool Markup Language'
+                ],
+                'correct' => 'a'
+            ],
+            [
+                'question' => 'Which CSS property controls text color?',
+                'options' => [
+                    'a' => 'text-color',
+                    'b' => 'color',
+                    'c' => 'font-color',
+                    'd' => 'text-style'
+                ],
+                'correct' => 'b'
+            ],
+            [
+                'question' => 'What is the correct way to link a CSS file in HTML?',
+                'options' => [
+                    'a' => '<link rel="stylesheet" href="style.css">',
+                    'b' => '<css src="style.css">',
+                    'c' => '<style src="style.css">',
+                    'd' => '<stylesheet>style.css</stylesheet>'
+                ],
+                'correct' => 'a'
+            ],
+            [
+                'question' => 'Which JavaScript method adds an element to the end of an array?',
+                'options' => [
+                    'a' => 'append()',
+                    'b' => 'push()',
+                    'c' => 'add()',
+                    'd' => 'insert()'
+                ],
+                'correct' => 'b'
+            ],
+            [
+                'question' => 'What is the purpose of responsive web design?',
+                'options' => [
+                    'a' => 'To make websites load faster',
+                    'b' => 'To adapt layout to different screen sizes',
+                    'c' => 'To improve SEO rankings',
+                    'd' => 'To reduce server load'
+                ],
+                'correct' => 'b'
+            ]
+        ];
+    }
+
+    /**
+     * Data structure specific templates
+     */
+    private function getDataStructureTemplates()
+    {
+        return [
+            [
+                'question' => 'What is the time complexity of accessing an array element by index?',
+                'options' => [
+                    'a' => 'O(1)',
+                    'b' => 'O(n)',
+                    'c' => 'O(log n)',
+                    'd' => 'O(n²)'
+                ],
+                'correct' => 'a'
+            ],
+            [
+                'question' => 'Which data structure follows LIFO principle?',
+                'options' => [
+                    'a' => 'Queue',
+                    'b' => 'Stack',
+                    'c' => 'Array',
+                    'd' => 'Linked List'
+                ],
+                'correct' => 'b'
+            ],
+            [
+                'question' => 'What is the main advantage of a linked list over an array?',
+                'options' => [
+                    'a' => 'Faster access time',
+                    'b' => 'Dynamic size allocation',
+                    'c' => 'Less memory usage',
+                    'd' => 'Better cache locality'
+                ],
+                'correct' => 'b'
+            ],
+            [
+                'question' => 'Which operation is most efficient in a hash table?',
+                'options' => [
+                    'a' => 'Sorting',
+                    'b' => 'Sequential access',
+                    'c' => 'Key-based lookup',
+                    'd' => 'Range queries'
+                ],
+                'correct' => 'c'
+            ],
+            [
+                'question' => 'What is the worst-case time complexity of binary search?',
+                'options' => [
+                    'a' => 'O(1)',
+                    'b' => 'O(n)',
+                    'c' => 'O(log n)',
+                    'd' => 'O(n log n)'
+                ],
+                'correct' => 'c'
+            ]
+        ];
+    }
+
+    /**
+     * Generic intelligent templates for any topic
      */
     private function getGenericTemplates($topic)
     {
         return [
             [
-                'question' => "What is the fundamental concept of {$topic}?",
+                'question' => "What is the fundamental principle underlying {$topic}?",
                 'options' => [
-                    'a' => "The basic principle underlying {$topic}",
-                    'b' => "An advanced feature of {$topic}",
-                    'c' => "A tool used in {$topic}",
-                    'd' => "The history of {$topic}"
+                    'a' => "The core concept that defines how {$topic} operates",
+                    'b' => "A secondary feature of {$topic}",
+                    'c' => "An outdated approach to {$topic}",
+                    'd' => "An unrelated concept to {$topic}"
                 ],
                 'correct' => 'a'
             ],
             [
-                'question' => "Which of the following best describes {$topic}?",
+                'question' => "Which characteristic best defines {$topic} in modern practice?",
                 'options' => [
-                    'a' => "A comprehensive system for managing {$topic}",
-                    'b' => "A simple tool for {$topic}",
-                    'c' => "An obsolete approach to {$topic}",
-                    'd' => "A theoretical concept unrelated to {$topic}"
+                    'a' => "Its comprehensive and systematic approach",
+                    'b' => "Its limited scope and application",
+                    'c' => "Its obsolete methodology",
+                    'd' => "Its theoretical nature only"
                 ],
                 'correct' => 'a'
             ],
             [
-                'question' => "What is the primary application of {$topic}?",
+                'question' => "What is the primary benefit of implementing {$topic}?",
                 'options' => [
-                    'a' => "Entertainment purposes",
-                    'b' => "Practical problem-solving in {$topic} domain",
-                    'c' => "Decoration only",
-                    'd' => "No practical use"
+                    'a' => "Reduced complexity only",
+                    'b' => "Improved efficiency and effectiveness",
+                    'c' => "Cosmetic improvements only",
+                    'd' => "No significant benefits"
                 ],
                 'correct' => 'b'
             ],
+            [
+                'question' => "In the context of {$topic}, what is most critical for success?",
+                'options' => [
+                    'a' => "Understanding the underlying principles",
+                    'b' => "Memorizing definitions only",
+                    'c' => "Avoiding the topic entirely",
+                    'd' => "Using outdated methods"
+                ],
+                'correct' => 'a'
+            ],
+            [
+                'question' => "How does {$topic} differ from traditional approaches?",
+                'options' => [
+                    'a' => "It uses modern, optimized methods",
+                    'b' => "It is exactly the same",
+                    'c' => "It is less efficient",
+                    'd' => "It has no practical application"
+                ],
+                'correct' => 'a'
+            ],
+            [
+                'question' => "What challenge is commonly faced when working with {$topic}?",
+                'options' => [
+                    'a' => "Initial learning curve and complexity",
+                    'b' => "Complete impossibility of implementation",
+                    'c' => "Lack of any documentation",
+                    'd' => "No challenges exist"
+                ],
+                'correct' => 'a'
+            ],
+            [
+                'question' => "Which industry or field benefits most from {$topic}?",
+                'options' => [
+                    'a' => "Multiple industries with varied applications",
+                    'b' => "No industry at all",
+                    'c' => "Only theoretical research",
+                    'd' => "Exclusively academic settings"
+                ],
+                'correct' => 'a'
+            ],
+            [
+                'question' => "What prerequisite knowledge helps in understanding {$topic}?",
+                'options' => [
+                    'a' => "Fundamental concepts in the related field",
+                    'b' => "No prerequisites needed",
+                    'c' => "Advanced quantum physics only",
+                    'd' => "Unrelated subjects"
+                ],
+                'correct' => 'a'
+            ],
+            [
+                'question' => "How has {$topic} evolved over time?",
+                'options' => [
+                    'a' => "Continuous improvement and refinement",
+                    'b' => "No change whatsoever",
+                    'c' => "Complete abandonment",
+                    'd' => "Regression to older methods"
+                ],
+                'correct' => 'a'
+            ],
+            [
+                'question' => "What is a common misconception about {$topic}?",
+                'options' => [
+                    'a' => "That it is more complex than it actually is",
+                    'b' => "That it always works perfectly",
+                    'c' => "That it has no real-world application",
+                    'd' => "That everyone understands it completely"
+                ],
+                'correct' => 'a'
+            ]
         ];
     }
 }

@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Quiz extends Model
+class TrueFalse extends Model
 {
     use HasFactory;
 
@@ -13,10 +13,10 @@ class Quiz extends Model
         'university_name',
         'topic_name',
         'num_questions',
-        'questions'
+        'statements'
     ];
 
     protected $casts = [
-        'questions' => 'array'
+        'statements' => 'array'
     ];
 }

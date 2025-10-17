@@ -123,4 +123,5 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    // Note: Laravel 11 auto-discovers providers. No manual providers/aliases here.
 ];
